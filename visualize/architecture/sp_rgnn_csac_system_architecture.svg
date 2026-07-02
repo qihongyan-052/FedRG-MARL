@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2600" height="1600" viewBox="0 0 2600 1600">
+<rect width="2600" height="1600" fill="#F7F9FB"/>
+<defs>
+<marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#475467"/></marker>
+<marker id="blueArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#2563EB"/></marker>
+<marker id="greenArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#059669"/></marker>
+<marker id="purpleArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth"><path d="M2,2 L10,6 L2,10 Z" fill="#7C3AED"/></marker>
+</defs>
+<text x="80" y="70" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="42" font-weight="700" fill="#1F2937" text-anchor="start">SP-RGNN-CSAC System Architecture</text>
+<text x="80" y="120" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#667085" text-anchor="start">Online execution, local constrained learning, and periodic personalized relation federation</text>
+<rect x="70" y="205" width="440" height="455" rx="26" fill="#EAF2FF" stroke="#93B8E8" stroke-width="3"/>
+<text x="95" y="245" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937" text-anchor="start">1  Local Relational Observation</text>
+<rect x="600" y="205" width="585" height="455" rx="26" fill="#EEF7F1" stroke="#89C99C" stroke-width="3"/>
+<text x="625" y="245" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937" text-anchor="start">2  Shared-Private Relational Actor</text>
+<rect x="1280" y="205" width="770" height="455" rx="26" fill="#FFF3E7" stroke="#F0A35C" stroke-width="3"/>
+<text x="1305" y="245" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937" text-anchor="start">3  Safe Execution and Regional Feedback</text>
+<rect x="70" y="760" width="640" height="575" rx="26" fill="#EAF2FF" stroke="#93B8E8" stroke-width="3"/>
+<text x="95" y="800" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937" text-anchor="start">4  Local Park Agents and Privacy Boundary</text>
+<rect x="820" y="770" width="750" height="565" rx="26" fill="#EAF8F2" stroke="#81C7A8" stroke-width="3"/>
+<text x="845" y="810" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937" text-anchor="start">5  Local Constrained Actor-Critic Learning</text>
+<rect x="1710" y="785" width="760" height="550" rx="26" fill="#F3EAFF" stroke="#B49AEE" stroke-width="3"/>
+<text x="1735" y="825" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="28" font-weight="700" fill="#1F2937" text-anchor="start">6  Personalized Relation Federation</text>
+<text x="290" y="430" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">EV/BES/PV/ES/TR feedback ↔ CS</text>
+<text x="895" y="370" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">type embedding → shared-private relation block</text>
+<text x="895" y="540" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">learnable relation-gated fusion → actor actions</text>
+<text x="1665" y="370" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">device bounds → CS capacity-safe adjustment → secure aggregation</text>
+<text x="1730" y="565" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">TR coordination → reward / cost / TR feedback</text>
+<text x="390" y="1065" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">three local park agents; private modules stay local</text>
+<text x="1195" y="1040" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">transition → replay buffer → reward/cost critics → constrained SAC</text>
+<text x="2090" y="1055" font-family="Segoe UI, Microsoft YaHei, Arial, sans-serif" font-size="25" font-weight="400" fill="#1F2937" text-anchor="middle">selected shared relation parameters only</text>
+<polyline points="510,430 600,430" fill="none" stroke="#2563EB" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blueArrow)"/>
+<polyline points="1185,430 1280,430" fill="none" stroke="#2563EB" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blueArrow)"/>
+<polyline points="1870,610 1870,705 300,705 300,660" fill="none" stroke="#2563EB" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blueArrow)"/>
+<polyline points="1900,610 1900,725 930,725 930,870" fill="none" stroke="#059669" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14 10" marker-end="url(#greenArrow)"/>
+<polyline points="1070,1175 750,1175 750,660" fill="none" stroke="#059669" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14 10" marker-end="url(#greenArrow)"/>
+<polyline points="675,1065 1750,960" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14 10" marker-end="url(#purpleArrow)"/>
+<polyline points="1905,1160 1180,1160 1030,660" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="14 10" marker-end="url(#purpleArrow)"/>
+</svg>
