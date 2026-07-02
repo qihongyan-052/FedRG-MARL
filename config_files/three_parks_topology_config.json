@@ -1,0 +1,138 @@
+{
+  "time_step_min": 15,
+  "horizon": {
+    "start": "08:00",
+    "end": "next_day_08:00",
+    "steps": 96
+  },
+  "tr": {
+    "id": "TR_MAIN",
+    "p_limit_kw": 900
+  },
+  "parks": [
+    {
+      "id": "residential",
+      "cs": {
+        "id": "CS_R",
+        "p_limit_kw": 350
+      },
+      "pv": {
+        "enabled": false
+      },
+      "bes": {
+        "id": "BES_R",
+        "cap_kwh": 500,
+        "p_ch_kw": 300,
+        "p_dis_kw": 300,
+        "soc0": 0.5,
+        "soc_min": 0.2,
+        "soc_max": 0.95,
+        "eta_ch": 0.98,
+        "eta_dis": 0.98
+      },
+      "cp": {
+        "count": 16,
+        "p_ch_max_kw": 20,
+        "p_dis_max_kw": 20
+      }
+    },
+    {
+      "id": "office",
+      "cs": {
+        "id": "CS_O",
+        "p_limit_kw": 420
+      },
+      "pv": {
+        "enabled": true
+      },
+      "bes": {
+        "id": "BES_O",
+        "cap_kwh": 600,
+        "p_ch_kw": 380,
+        "p_dis_kw": 380,
+        "soc0": 0.5,
+        "soc_min": 0.2,
+        "soc_max": 0.95,
+        "eta_ch": 0.98,
+        "eta_dis": 0.98
+      },
+      "cp": {
+        "count": 12,
+        "p_ch_max_kw": 30,
+        "p_dis_max_kw": 30
+      }
+    },
+    {
+      "id": "commercial",
+      "cs": {
+        "id": "CS_C",
+        "p_limit_kw": 500
+      },
+      "pv": {
+        "enabled": true
+      },
+      "bes": {
+        "id": "BES_C",
+        "cap_kwh": 800,
+        "p_ch_kw": 520,
+        "p_dis_kw": 520,
+        "soc0": 0.5,
+        "soc_min": 0.2,
+        "soc_max": 0.95,
+        "eta_ch": 0.98,
+        "eta_dis": 0.98
+      },
+      "cp": {
+        "count": 8,
+        "p_ch_max_kw": 50,
+        "p_dis_max_kw": 50
+      }
+    }
+  ],
+  "links": [
+    [
+      "TR_MAIN",
+      "CS_R"
+    ],
+    [
+      "TR_MAIN",
+      "CS_O"
+    ],
+    [
+      "TR_MAIN",
+      "CS_C"
+    ],
+    [
+      "CS_R",
+      "BES_R"
+    ],
+    [
+      "CS_O",
+      "BES_O"
+    ],
+    [
+      "CS_C",
+      "BES_C"
+    ],
+    [
+      "CS_R",
+      "CP_R"
+    ],
+    [
+      "CS_O",
+      "CP_O"
+    ],
+    [
+      "CS_C",
+      "CP_C"
+    ],
+    [
+      "CS_O",
+      "PV_O"
+    ],
+    [
+      "CS_C",
+      "PV_C"
+    ]
+  ]
+}
