@@ -33,6 +33,8 @@ from train_three_park_agent import (
     compute_park_target_entropy,
     configure_environment,
     load_cp_count_by_park,
+    normalize_federation_scheme,
+    resolve_federation_scheme,
     set_global_seed,
     validate_training_config,
     _restore_agent_from_checkpoint,
@@ -41,14 +43,15 @@ from train_three_park_agent import (
 
 @dataclass
 class EvaluationConfig:
-    run_name: str = "SP_RGNN_CSAC-隐私+参数联邦-2"
-    algorithm_variant: str = "sp_rgnn_csac"  # gnn_sac/gnn_csac/sp_rgnn_csac/mlp_sac/mlp_td3/mlp_csac/hgt_sac/hgt_csac/sp_rgnn_csac-ablation1/sp_rgnn_csac-ablation2
-    enable_federation: bool = True
+    run_name: str = "sp_rgnn_csac-ablation2-8"
+    algorithm_variant: str = "sp_rgnn_csac-ablation2"  # gnn_sac/gnn_csac/sp_rgnn_csac/mlp_sac/mlp_td3/mlp_csac/hgt_sac/hgt_csac/sp_rgnn_csac-ablation1/sp_rgnn_csac-ablation2
+    enable_federation: bool = False
+    federation_scheme: str | None = None  # personalized/fedavg/fedprox; None infers from checkpoint
     privacy_mode: str = "strong"  # strong/none
     checkpoint_kind: str = "best"  # best/final
-    eval_episodes: int = 7
+    eval_episodes: int = 30
     deterministic: bool = True
-    seed: int = 10
+    seed: int = 130
     act_device: str = "cpu"
     update_device: str = "cpu"
     save_csv: bool = True
@@ -105,11 +108,20 @@ def _validate_eval_config_against_saved_models(
 
     optional_expected_pairs = {
         "decouple_actor_output_heads": eval_config.decouple_actor_output_heads,
+        "federation_scheme": (
+            normalize_federation_scheme(eval_config.federation_scheme)
+            if eval_config.federation_scheme is not None
+            else None
+        ),
     }
     for key, expected_value in optional_expected_pairs.items():
         if expected_value is None:
             continue
         saved_value = reference_agent_cfg.get(key)
+        if key == "federation_scheme" and saved_value is None:
+            # Legacy checkpoints did not persist the explicit scheme. The
+            # effective legacy route is checked below from the full signature.
+            continue
         if saved_value != expected_value:
             mismatches.append(f"{key}: eval={expected_value!r}, saved={saved_value!r}")
 
@@ -162,13 +174,26 @@ def _infer_saved_experiment_signature(
     reference_checkpoint: Dict[str, Any],
 ) -> Dict[str, Any]:
     agent_cfg = dict(reference_checkpoint["agent_config"])
+    raw_federation_scheme = agent_cfg.get("federation_scheme")
     return {
         "algorithm_variant": str(agent_cfg.get("algorithm_variant", "gnn_csac")),
         "privacy_mode": normalize_privacy_mode(str(agent_cfg.get("privacy_mode", agent_cfg.get("state_mode", "strong")))),
         "enable_federation": bool(agent_cfg.get("enable_federation", False)),
+        # Older checkpoints stored a literal None before the explicit
+        # federation-scheme metadata was introduced.  Treat that the same as
+        # missing legacy metadata so _build_env_training_config can infer the
+        # effective route via federation_scheme="auto".
+        "federation_scheme": (
+            "legacy" if raw_federation_scheme is None else str(raw_federation_scheme)
+        ),
         "decouple_actor_output_heads": bool(agent_cfg.get("decouple_actor_output_heads", False)),
         "federate_critic_backbone": bool(agent_cfg.get("federate_critic_backbone", False)),
+        "actor_proximal_weight": float(agent_cfg.get("actor_proximal_weight", 0.0)),
+        "critic_proximal_weight": float(agent_cfg.get("critic_proximal_weight", 0.0)),
         "enable_auxiliary_risk_critic": bool(agent_cfg.get("enable_auxiliary_risk_critic", False)),
+        "suppress_parameter_aggregation": bool(
+            agent_cfg.get("suppress_parameter_aggregation", False)
+        ),
         "use_central_tr_hgt_agent": False,
     }
 
@@ -186,6 +211,29 @@ def _validate_saved_route_signature(
         mismatches.append(
             f"enable_federation: eval={eval_config.enable_federation!r}, saved={saved_signature['enable_federation']!r}"
         )
+    if eval_config.federation_scheme is not None:
+        expected_federation_scheme = normalize_federation_scheme(eval_config.federation_scheme)
+        saved_federation_scheme_raw = str(saved_signature["federation_scheme"])
+        if saved_federation_scheme_raw == "legacy":
+            legacy_route_config = TrainingConfig(
+                algorithm_variant=str(saved_signature["algorithm_variant"]),
+                enable_federation=bool(saved_signature["enable_federation"]),
+                federation_scheme="auto",
+                federate_critic_backbone=bool(saved_signature["federate_critic_backbone"]),
+                enable_fed_distillation=False,
+            )
+            inferred_legacy_scheme = resolve_federation_scheme(legacy_route_config)
+            if inferred_legacy_scheme != expected_federation_scheme:
+                mismatches.append(
+                    "federation_scheme: "
+                    f"eval={expected_federation_scheme!r}, "
+                    f"legacy checkpoint infers {inferred_legacy_scheme!r}"
+                )
+        elif normalize_federation_scheme(saved_federation_scheme_raw) != expected_federation_scheme:
+            mismatches.append(
+                "federation_scheme: "
+                f"eval={expected_federation_scheme!r}, saved={saved_federation_scheme_raw!r}"
+            )
     if saved_signature["privacy_mode"] != normalize_privacy_mode(eval_config.privacy_mode):
         mismatches.append(
             f"privacy_mode: eval={normalize_privacy_mode(eval_config.privacy_mode)!r}, saved={saved_signature['privacy_mode']!r}"
@@ -314,9 +362,11 @@ def _infer_saved_experiment_signature_central(
         "algorithm_variant": str(agent_cfg.get("algorithm_variant", "hgt_sac")),
         "privacy_mode": normalize_privacy_mode(str(agent_cfg.get("privacy_mode", "strong"))),
         "enable_federation": False,
+        "federation_scheme": "none",
         "decouple_actor_output_heads": bool(agent_cfg.get("decouple_actor_output_heads", False)),
         "federate_critic_backbone": False,
         "enable_auxiliary_risk_critic": False,
+        "suppress_parameter_aggregation": False,
         "use_central_tr_hgt_agent": True,
     }
 
@@ -339,11 +389,21 @@ def _build_env_training_config(
         run_name=eval_config.run_name,
         algorithm_variant=str(saved_signature["algorithm_variant"]),
         enable_federation=eval_config.enable_federation,
-        federate_critic_backbone=False,
+        federation_scheme=(
+            str(saved_signature.get("federation_scheme", "auto"))
+            if str(saved_signature.get("federation_scheme", "legacy")) != "legacy"
+            else "auto"
+        ),
+        federate_critic_backbone=bool(saved_signature.get("federate_critic_backbone", False)),
+        actor_proximal_weight=float(saved_signature.get("actor_proximal_weight", 0.0)),
+        critic_proximal_weight=float(saved_signature.get("critic_proximal_weight", 0.0)),
         privacy_mode=str(saved_signature["privacy_mode"]),
         use_strong_tr_projection_for_nonprivacy=bool(eval_config.use_strong_tr_projection_for_nonprivacy),
         enable_fed_distillation=False,
         enable_fed_distill_actor=False,
+        suppress_parameter_aggregation=bool(
+            saved_signature.get("suppress_parameter_aggregation", False)
+        ),
         use_central_tr_hgt_agent=bool(saved_signature.get("use_central_tr_hgt_agent", False)),
         decouple_actor_output_heads=bool(saved_signature["decouple_actor_output_heads"]),
         bes_only_mode=bool(eval_config.bes_only_mode),
@@ -452,19 +512,6 @@ def _write_step_eval_csv(path: Path, rows: List[Dict[str, object]]) -> None:
 
 
 def run_evaluation(config: EvaluationConfig) -> None:
-    validate_training_config(
-        TrainingConfig(
-            run_name=config.run_name,
-            algorithm_variant=config.algorithm_variant,
-            enable_federation=config.enable_federation,
-            privacy_mode=config.privacy_mode,
-            enable_fed_distillation=config.enable_fed_distillation,
-            use_central_tr_hgt_agent=config.use_central_tr_hgt_agent,
-            use_strong_tr_projection_for_nonprivacy=config.use_strong_tr_projection_for_nonprivacy,
-            act_device=config.act_device,
-            update_device=config.update_device,
-        )
-    )
     root_dir = Path(__file__).resolve().parent
     model_dir = _resolve_model_dir(root_dir, config.run_name, config.enable_federation, config.checkpoint_kind)
 
@@ -475,6 +522,10 @@ def run_evaluation(config: EvaluationConfig) -> None:
         saved_signature = _infer_saved_experiment_signature(first_checkpoint)
     _validate_saved_route_signature(saved_signature, config)
     eval_training_config = _build_env_training_config(config, saved_signature=saved_signature)
+    # Validate the real training-route metadata restored from the checkpoint.
+    # In particular, an explicit FedProx evaluation must use the saved positive
+    # proximal coefficient instead of the TrainingConfig default (zero).
+    validate_training_config(eval_training_config)
 
     set_global_seed(config.seed)
     local_agents: Dict[str, Any] | None = None

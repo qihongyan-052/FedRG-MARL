@@ -42,9 +42,11 @@ from visualize.train.plot_episode_reward_components import generate_episode_rewa
 
 @dataclass
 class TrainingConfig:
-    run_name: str = "sp_rgnn_csac-ablation2-7"
-    algorithm_variant: str = "sp_rgnn_csac-ablation2"  # gnn_sac/gnn_csac/sp_rgnn_csac/mlp_sac/mlp_td3/mlp_csac/hgt_sac/hgt_csac/sp_rgnn_csac-ablation1
-    enable_federation: bool = False   # 是否联邦
+    run_name: str = "sp_rgnn_csac-ablation2-8"
+    algorithm_variant: str = "sp_rgnn_csac-ablation2"  # gnn_sac/gnn_csac/sp_rgnn_csac/mlp_sac/mlp_td3/mlp_csac/hgt_sac/hgt_csac/sp_rgnn_csac-ablation1/sp_rgnn_csac-ablation2
+    enable_federation: bool = False
+    federation_scheme: str = None  # auto/personalized/fedavg/fedprox/none
+    suppress_parameter_aggregation: bool = False
     federate_critic_backbone: bool = False    # 是否联邦actor+critic
     privacy_mode: str = "strong"   # strong/none
     enable_fed_distillation: bool = False     # 是否联邦蒸馏
@@ -121,7 +123,9 @@ class TrainingConfig:
     batch_size: int = 128
     replay_size: int = 100000
     target_entropy_scale: float = -1.0
-    actor_proximal_weight: float = 2e-4
+
+    actor_proximal_weight: float = 2e-4  # Kept consistent with the original ablation2-7 run; inactive without federation.
+
     critic_proximal_weight: float = 1e-4
     d: float = 30.0
     lambda_lr: float = 3e-4
@@ -162,6 +166,51 @@ SP_RGNN_CSAC_VARIANTS = {"sp_rgnn_csac", "sp_rgnn_csac-ablation1", "sp_rgnn_csac
 SP_RGNN_CSAC_ABLATION1 = "sp_rgnn_csac-ablation1"
 SP_RGNN_CSAC_ABLATION2 = "sp_rgnn_csac-ablation2"
 SP_RGNN_CSAC_NONFED_ABLATIONS = {SP_RGNN_CSAC_ABLATION1, SP_RGNN_CSAC_ABLATION2}
+FEDERATION_SCHEMES = {"auto", "none", "personalized", "fedavg", "fedprox"}
+
+
+def normalize_federation_scheme(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "").replace("_", "")
+    aliases = {
+        "auto": "auto",
+        "none": "none",
+        "nofl": "none",
+        "local": "none",
+        "personalized": "personalized",
+        "personalised": "personalized",
+        "pfed": "personalized",
+        "fedrgmarl": "personalized",
+        "fedavg": "fedavg",
+        "fedprox": "fedprox",
+    }
+    if normalized not in aliases:
+        allowed = ", ".join(sorted(FEDERATION_SCHEMES))
+        raise ValueError(f"unsupported federation_scheme={value!r}; expected one of: {allowed}")
+    return aliases[normalized]
+
+
+def _supports_personalized_actor_federation(config: TrainingConfig) -> bool:
+    return (
+        not config.enable_fed_distillation
+        and not config.federate_critic_backbone
+        and config.algorithm_variant in {
+            "hgt_sac",
+            "hgt_csac",
+            "sp_rgnn_csac",
+            SP_RGNN_CSAC_ABLATION1,
+        }
+    )
+
+
+def resolve_federation_scheme(config: TrainingConfig) -> str:
+    if not config.enable_federation:
+        return "none"
+    scheme = normalize_federation_scheme(config.federation_scheme)
+    if scheme == "auto":
+        if _supports_personalized_actor_federation(config):
+            return "personalized"
+        return "fedprox" if float(config.actor_proximal_weight) > 0.0 else "fedavg"
+    return scheme
 
 
 class CSVLogger:
@@ -306,6 +355,30 @@ def resolve_compute_device(device: str) -> str:
 
 
 def validate_training_config(config: TrainingConfig) -> None:
+    requested_federation_scheme = normalize_federation_scheme(config.federation_scheme)
+    effective_federation_scheme = resolve_federation_scheme(config)
+    if not config.enable_federation and requested_federation_scheme not in {"auto", "none"}:
+        raise RuntimeError(
+            "set enable_federation=True when federation_scheme is "
+            f"{requested_federation_scheme!r}; use federation_scheme='none' for No-FL."
+        )
+    if config.enable_federation and effective_federation_scheme == "none":
+        raise RuntimeError("federation_scheme='none' requires enable_federation=False.")
+    if effective_federation_scheme == "personalized" and not _supports_personalized_actor_federation(config):
+        raise RuntimeError(
+            "personalized federation requires actor-only parameter federation with "
+            "algorithm_variant in {'hgt_sac', 'hgt_csac', 'sp_rgnn_csac'}."
+        )
+    if effective_federation_scheme == "fedavg":
+        if float(config.actor_proximal_weight) != 0.0:
+            raise RuntimeError("FedAvg requires actor_proximal_weight=0.0.")
+        if config.federate_critic_backbone and float(config.critic_proximal_weight) != 0.0:
+            raise RuntimeError("FedAvg requires critic_proximal_weight=0.0 when the critic is federated.")
+    if effective_federation_scheme == "fedprox":
+        if float(config.actor_proximal_weight) <= 0.0:
+            raise RuntimeError("FedProx requires actor_proximal_weight>0.0.")
+        if config.federate_critic_backbone and float(config.critic_proximal_weight) <= 0.0:
+            raise RuntimeError("FedProx requires critic_proximal_weight>0.0 when the critic is federated.")
     if _uses_central_tr_hgt_agent(config):
         if config.algorithm_variant not in {"hgt_sac", "gnn_csac"}:
             raise RuntimeError("central TR agent is currently implemented only for hgt_sac or gnn_csac.")
@@ -324,7 +397,25 @@ def validate_training_config(config: TrainingConfig) -> None:
             "MLP federation is not supported in the current system. "
             "The three parks use different MLP state dimensions, so FedAvg cannot directly aggregate park-specific actor/critic backbones."
         )
-    if config.algorithm_variant in SP_RGNN_CSAC_NONFED_ABLATIONS and config.enable_federation:
+    exact_warmup_ablation = (
+        config.algorithm_variant == SP_RGNN_CSAC_ABLATION1
+        and config.suppress_parameter_aggregation
+    )
+    if config.suppress_parameter_aggregation and not exact_warmup_ablation:
+        raise RuntimeError(
+            "suppress_parameter_aggregation is supported only by the SP-RGNN-CSAC "
+            "no-aggregation ablation."
+        )
+    if exact_warmup_ablation and not config.enable_federation:
+        raise RuntimeError(
+            "exact-warmup ablation1 requires enable_federation=True so its pre-aggregation "
+            "execution path matches FedRG-MARL."
+        )
+    if (
+        config.algorithm_variant in SP_RGNN_CSAC_NONFED_ABLATIONS
+        and config.enable_federation
+        and not exact_warmup_ablation
+    ):
         raise RuntimeError(f"{config.algorithm_variant} removes parameter federation; set enable_federation=False.")
     if config.enable_fed_distillation:
         if config.enable_federation:
@@ -615,12 +706,20 @@ def build_local_agents(config: TrainingConfig) -> Dict[str, Any]:
                 LocalSPRGNNCSACConfig(
                     park_type=park_type,
                     algorithm_variant=config.algorithm_variant,
-                    enable_federation=False if config.algorithm_variant in SP_RGNN_CSAC_NONFED_ABLATIONS else config.enable_federation,
+                    enable_federation=(
+                        config.enable_federation
+                        if config.suppress_parameter_aggregation
+                        else False
+                        if config.algorithm_variant in SP_RGNN_CSAC_NONFED_ABLATIONS
+                        else config.enable_federation
+                    ),
                     federate_critic_backbone=config.federate_critic_backbone,
                     privacy_mode=config.privacy_mode,
                     decouple_actor_output_heads=config.decouple_actor_output_heads,
                     use_relation_gated_fusion=config.algorithm_variant != SP_RGNN_CSAC_ABLATION2,
                     use_critic_typed_pooling=config.algorithm_variant != SP_RGNN_CSAC_ABLATION2,
+                    federation_scheme=resolve_federation_scheme(config),
+                    suppress_parameter_aggregation=config.suppress_parameter_aggregation,
                     alpha_lr=config.alpha_lr,
                     gamma=config.gamma,
                     tau=config.tau,
@@ -1164,8 +1263,12 @@ def _evaluation_agent_config_keys(checkpoint_format: str) -> tuple[str, ...]:
         )
         if checkpoint_format == "sp_rgnn_csac_v1":
             keys += (
+                "federation_scheme",
+                "actor_proximal_weight",
+                "critic_proximal_weight",
                 "use_relation_gated_fusion",
                 "use_critic_typed_pooling",
+                "suppress_parameter_aggregation",
             )
         return keys
     if checkpoint_format == "hgt_sac_v2":
@@ -1537,12 +1640,13 @@ def _save_central_full_named(target_dir: Path, central_agent: Any, episode: int)
 
 
 def _uses_lag_pfed_actor(config: TrainingConfig) -> bool:
-    return (
-        config.enable_federation
-        and not config.enable_fed_distillation
-        and not config.federate_critic_backbone
-        and config.algorithm_variant in {"hgt_sac", "hgt_csac", "sp_rgnn_csac"}
-    )
+    return resolve_federation_scheme(config) == "personalized"
+
+
+def _fed_actor_scheme_label(config: TrainingConfig, coordinator: Any | None) -> str:
+    if coordinator is None:
+        return ""
+    return resolve_federation_scheme(config)
 
 
 def _lag_gate_margin_by_park(config: TrainingConfig) -> Dict[str, float]:
@@ -1897,6 +2001,19 @@ def _try_resume_training_state(
         raise RuntimeError("resume checkpoint privacy_mode does not match current config")
     if saved_config.get("enable_federation") != config.enable_federation:
         raise RuntimeError("resume checkpoint enable_federation does not match current config")
+    if bool(saved_config.get("suppress_parameter_aggregation", False)) != bool(
+        config.suppress_parameter_aggregation
+    ):
+        raise RuntimeError(
+            "resume checkpoint suppress_parameter_aggregation does not match current config"
+        )
+    saved_federation_scheme = normalize_federation_scheme(saved_config.get("federation_scheme", "auto"))
+    current_federation_scheme = normalize_federation_scheme(config.federation_scheme)
+    if saved_federation_scheme != current_federation_scheme:
+        raise RuntimeError(
+            "resume checkpoint federation_scheme does not match current config: "
+            f"checkpoint={saved_federation_scheme!r}, current={current_federation_scheme!r}"
+        )
     if bool(saved_config.get("enable_fed_distillation", False)) != config.enable_fed_distillation:
         raise RuntimeError("resume checkpoint enable_fed_distillation does not match current config")
     if bool(saved_config.get("federate_critic_backbone", False)) != config.federate_critic_backbone:
@@ -2286,6 +2403,8 @@ def run_training(config: TrainingConfig) -> None:
         run_name=config.run_name,
         algorithm_variant=config.algorithm_variant,
         enable_federation=config.enable_federation,
+        federation_scheme=config.federation_scheme,
+        suppress_parameter_aggregation=config.suppress_parameter_aggregation,
         federate_critic_backbone=config.federate_critic_backbone,
         privacy_mode=config.privacy_mode,
         enable_fed_distillation=config.enable_fed_distillation,
@@ -2470,6 +2589,8 @@ def run_training(config: TrainingConfig) -> None:
             f"enable_fed_distillation={config.enable_fed_distillation} "
             f"enable_fed_distill_actor={config.enable_fed_distill_actor} "
             f"enable_federation={config.enable_federation} "
+            f"federation_scheme={resolve_federation_scheme(config)} "
+            f"suppress_parameter_aggregation={config.suppress_parameter_aggregation} "
             f"decouple_actor_output_heads={config.decouple_actor_output_heads} "
             f"federate_critic_backbone={config.federate_critic_backbone} "
             f"bes_only_mode={config.bes_only_mode} "
@@ -2632,7 +2753,11 @@ def run_training(config: TrainingConfig) -> None:
                 latest_fed_distill_metrics = _run_fed_distillation_round(local_agents, config)
 
             if actor_fed_coordinator is not None and actor_fed_coordinator.should_aggregate(episode):
-                if _uses_lag_pfed_actor(config):
+                if config.suppress_parameter_aggregation:
+                    print(
+                        f"  actor_fed: aggregation suppressed by ablation at episode={episode:03d}"
+                    )
+                elif _uses_lag_pfed_actor(config):
                     latest_actor_fed_metrics = actor_fed_coordinator.aggregate(local_agents)
                 else:
                     uniform_actor_weights = {
@@ -2645,7 +2770,7 @@ def run_training(config: TrainingConfig) -> None:
                         block_weights={"actor_backbone": uniform_actor_weights},
                         selected_blocks=["actor_backbone"],
                     )
-                    latest_actor_fed_metrics = None
+                    latest_actor_fed_metrics = dict(actor_fed_coordinator.last_metrics)
             if (
                 critic_fed_coordinator is not None
                 and config.federate_critic_backbone
@@ -2716,7 +2841,7 @@ def run_training(config: TrainingConfig) -> None:
             training_row.update(
                 _flatten_fed_actor_metrics(
                     latest_actor_fed_metrics,
-                    scheme="lag_pfed_actor" if _uses_lag_pfed_actor(config) else ("fedavg" if actor_fed_coordinator is not None else ""),
+                    scheme=_fed_actor_scheme_label(config, actor_fed_coordinator),
                 )
             )
             training_row.update(latest_fed_distill_metrics)
@@ -2762,7 +2887,7 @@ def run_training(config: TrainingConfig) -> None:
                 )
             _print_fed_actor_metrics(
                 latest_actor_fed_metrics,
-                scheme="lag_pfed_actor" if _uses_lag_pfed_actor(config) else ("fedavg" if actor_fed_coordinator is not None else ""),
+                scheme=_fed_actor_scheme_label(config, actor_fed_coordinator),
             )
             if latest_fed_distill_metrics.get("fed_distill_rounds", 0.0) > 0:
                 print(
@@ -2794,6 +2919,32 @@ def run_training(config: TrainingConfig) -> None:
         reward_logger.close()
         training_logger.close()
         bes_soc_step_logger.close()
+
+
+def build_default_ablation1_config(
+    run_name: str = "sp_rgnn_csac-ablation1-no-aggregation",
+    total_episodes: int = 1000,
+) -> TrainingConfig:
+    """Build the no-aggregation ablation with FedRG-4's execution path."""
+    return TrainingConfig(
+        run_name=run_name,
+        algorithm_variant=SP_RGNN_CSAC_ABLATION1,
+        enable_federation=True,
+        federation_scheme="personalized",
+        suppress_parameter_aggregation=True,
+        resume_training=False,
+        seed=10,
+        deterministic_training=True,
+        total_episodes=total_episodes,
+        sp_rgnn_actor_backbone_lr_before_fed_start=3e-4,
+        sp_rgnn_actor_head_lr_before_fed_start=3e-4,
+        sp_rgnn_critic_backbone_lr_before_fed_start=3e-4,
+        sp_rgnn_critic_head_lr_before_fed_start=3e-4,
+        sp_rgnn_actor_backbone_lr_after_fed_start=2e-4,
+        sp_rgnn_actor_head_lr_after_fed_start=2e-4,
+        sp_rgnn_critic_backbone_lr_after_fed_start=3e-4,
+        sp_rgnn_critic_head_lr_after_fed_start=3e-4,
+    )
 
 
 if __name__ == "__main__":

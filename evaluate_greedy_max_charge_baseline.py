@@ -15,8 +15,8 @@ from train_three_park_agent import TrainingConfig, build_joint_action, configure
 class GreedyMaxChargeEvaluationConfig:
     run_name: str = "max_charge-strong"
     privacy_mode: str = "strong"
-    seed: int = 10
-    eval_episodes: int = 7
+    seed: int = 40
+    eval_episodes: int = 30
     save_csv: bool = True
 
 
