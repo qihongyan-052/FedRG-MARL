@@ -135,15 +135,6 @@ This repository implements federation as a centralized single-process simulation
 
 Profiling is single-process CPU profiling and does not measure network transfer latency or throughput.
 
-## Data and artifact availability
-
-The following directories are intentionally **not included** in the GitHub repository:
-
-```text
-saved/       # Checkpoints, training logs, evaluation CSVs, generated figures, profiling artifacts
-返修意见/     # Revision materials
-论文/          # Manuscript materials
-```
 
 As a result, a fresh clone contains the source code and configuration files, but not pretrained checkpoints or the experiment artifacts required to reproduce reported numerical results directly. Training and evaluation scripts expect experiment artifacts under `saved/<run_name>/` when checkpoint evaluation is requested.
 
