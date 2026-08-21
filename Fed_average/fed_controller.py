@@ -22,6 +22,8 @@ class FederatedAveragingCoordinator:
 
     def __init__(self, config: FederatedConfig | None = None) -> None:
         self.config = config or FederatedConfig()
+        self.aggregate_count = 0
+        self.last_metrics: Dict[str, object] = {}
 
     def should_aggregate(self, episode_idx: int) -> bool:
         completed_episodes = episode_idx + 1
@@ -85,7 +87,30 @@ class FederatedAveragingCoordinator:
         for park_id in park_ids:
             local_agents[park_id].load_shared_state(aggregated)
             local_agents[park_id].set_global_actor_reference(aggregated)
+        weight_sum = sum(float(normalized_weights[park_id]) for park_id in park_ids)
+        if weight_sum <= 0.0:
+            raise ValueError("federated averaging weights must sum to a positive value")
+        normalized_weight_row = [
+            float(normalized_weights[park_id]) / weight_sum
+            for park_id in park_ids
+        ]
+        self.aggregate_count += 1
+        self.last_metrics = {
+            "fed_weights": [list(normalized_weight_row) for _ in park_ids],
+            "aggregate_count": self.aggregate_count,
+        }
         return aggregated
+
+    def export_state(self) -> Dict[str, object]:
+        return {
+            "aggregate_count": self.aggregate_count,
+            "last_metrics": copy.deepcopy(self.last_metrics),
+        }
+
+    def load_state(self, state: Dict[str, object]) -> None:
+        self.aggregate_count = int(state.get("aggregate_count", 0))
+        last_metrics = state.get("last_metrics", {})
+        self.last_metrics = copy.deepcopy(last_metrics) if isinstance(last_metrics, dict) else {}
 
     @staticmethod
     def _relation_name_from_state_key(key: str) -> str | None:

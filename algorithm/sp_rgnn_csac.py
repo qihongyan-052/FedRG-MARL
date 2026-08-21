@@ -519,6 +519,8 @@ class LocalSPRGNNCSACConfig:
     relation_fed_mix_by_relation: Dict[str, float] | None = None
     use_relation_gated_fusion: bool = True
     use_critic_typed_pooling: bool = True
+    federation_scheme: str = "none"
+    suppress_parameter_aggregation: bool = False
 
     def __post_init__(self) -> None:
         if self.decouple_actor_output_heads is None:
