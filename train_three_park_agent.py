@@ -42,7 +42,7 @@ from visualize.train.plot_episode_reward_components import generate_episode_rewa
 
 @dataclass
 class TrainingConfig:
-    run_name: str = "sp_rgnn_csac-ablation2-8"
+    run_name: str = "sp_rgnn_csac-ablation2"
     algorithm_variant: str = "sp_rgnn_csac-ablation2"  # gnn_sac/gnn_csac/sp_rgnn_csac/mlp_sac/mlp_td3/mlp_csac/hgt_sac/hgt_csac/sp_rgnn_csac-ablation1/sp_rgnn_csac-ablation2
     enable_federation: bool = False
     federation_scheme: str = None  # auto/personalized/fedavg/fedprox/none
@@ -99,14 +99,14 @@ class TrainingConfig:
     strong_nonfed_fed_actor_head_lr_after_fed_start: float = 3e-4
     strong_nonfed_fed_critic_head_lr_before_fed_start: float = 3e-4
     strong_nonfed_fed_critic_head_lr_after_fed_start: float = 3e-4
-    sp_rgnn_actor_backbone_lr_before_fed_start: float = 2e-4
-    sp_rgnn_actor_backbone_lr_after_fed_start: float = 1e-4
-    sp_rgnn_critic_backbone_lr_before_fed_start: float = 2e-4
-    sp_rgnn_critic_backbone_lr_after_fed_start: float = 1e-4
-    sp_rgnn_actor_head_lr_before_fed_start: float = 2e-4
-    sp_rgnn_actor_head_lr_after_fed_start: float = 1e-4
-    sp_rgnn_critic_head_lr_before_fed_start: float = 2e-4
-    sp_rgnn_critic_head_lr_after_fed_start: float = 1e-4
+    sp_rgnn_actor_backbone_lr_before_fed_start: float = 3e-4
+    sp_rgnn_actor_backbone_lr_after_fed_start: float = 3e-4
+    sp_rgnn_critic_backbone_lr_before_fed_start: float = 3e-4
+    sp_rgnn_critic_backbone_lr_after_fed_start: float = 3e-4
+    sp_rgnn_actor_head_lr_before_fed_start: float = 3e-4
+    sp_rgnn_actor_head_lr_after_fed_start: float = 3e-4
+    sp_rgnn_critic_head_lr_before_fed_start: float = 3e-4
+    sp_rgnn_critic_head_lr_after_fed_start: float = 3e-4
     critic_federated_warmup_episodes: int = 200
     critic_federation_early_phase_end_episode: int = 450
     critic_federation_mid_phase_end_episode: int = 700

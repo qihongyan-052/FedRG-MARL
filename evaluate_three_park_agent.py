@@ -43,7 +43,7 @@ from train_three_park_agent import (
 
 @dataclass
 class EvaluationConfig:
-    run_name: str = "sp_rgnn_csac-ablation2-8"
+    run_name: str = "sp_rgnn_csac-ablation2"
     algorithm_variant: str = "sp_rgnn_csac-ablation2"  # gnn_sac/gnn_csac/sp_rgnn_csac/mlp_sac/mlp_td3/mlp_csac/hgt_sac/hgt_csac/sp_rgnn_csac-ablation1/sp_rgnn_csac-ablation2
     enable_federation: bool = False
     federation_scheme: str | None = None  # personalized/fedavg/fedprox; None infers from checkpoint
